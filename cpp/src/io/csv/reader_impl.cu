@@ -222,8 +222,12 @@ table_with_metadata reader::impl::read(rmm::cuda_stream_view stream)
     std::vector<char> h_uncomp_data_owner;
 
     if (compression_type_ != "none") {
-      h_uncomp_data_owner = get_uncompressed_data(h_data, compression_type_);
-      h_data              = h_uncomp_data_owner;
+      if (compression_type_ == "gzip") {
+        // Do gnuzip inflate.
+      } else {
+        h_uncomp_data_owner = get_uncompressed_data(h_data, compression_type_);
+        h_data              = h_uncomp_data_owner;
+      }
     }
     // None of the parameters for row selection is used, we are parsing the entire file
     const bool load_whole_file = range_offset == 0 && range_size == 0 && skip_rows <= 0 &&
