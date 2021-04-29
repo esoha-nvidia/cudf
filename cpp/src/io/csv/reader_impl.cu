@@ -21,6 +21,7 @@
 
 #include "reader_impl.hpp"
 
+#include <io/comp/gpuinflate.h>
 #include <io/comp/io_uncomp.h>
 #include <io/utilities/parsing_utils.cuh>
 #include <io/utilities/type_conversion.cuh>
@@ -223,11 +224,79 @@ table_with_metadata reader::impl::read(rmm::cuda_stream_view stream)
 
     if (compression_type_ != "none") {
       if (compression_type_ == "gzip") {
-        // Do gnuzip inflate.
+        // Do gunzip inflate.
+
+        // Allocate memory for gpuinflate structs on host, pinned.
+        // Must be pinned so that they don't get paged out while
+        // gpuinflate is running.
+        cudf::io::gpu_inflate_input_s* inf_args = nullptr;
+        CUDA_TRY(cudaMallocHost((void**)&inf_args, sizeof(cudf::io::gpu_inflate_input_s)));
+        cudf::io::gpu_inflate_status_s* inf_stat = nullptr;
+        CUDA_TRY(
+            cudaMallocHost((void**)&inf_stat, sizeof(cudf::io::gpu_inflate_status_s)));
+
+        // Allocate memory for gpuinflate structs on device.  Just one file.
+        rmm::device_vector<cudf::io::gpu_inflate_input_s> d_inf_args(1);
+        rmm::device_vector<cudf::io::gpu_inflate_status_s> d_inf_stat(1);
+
+        // Make buffers on device.
+        rmm::device_buffer src(h_data.data(), h_data.size());
+
+        // Original size is last 4 bytes in little-endian according to
+        // RFC 1952.  This is only correct up to 2**32 bytes.  TODO:
+        // Handle this?
+
+        uint32_t decompressed_size =
+            reinterpret_cast<const uint8_t*>(h_data.data())[h_data.size() - 1] << 24 |
+            reinterpret_cast<const uint8_t*>(h_data.data())[h_data.size() - 2] << 16 |
+            reinterpret_cast<const uint8_t*>(h_data.data())[h_data.size() - 3] <<  8 |
+            reinterpret_cast<const uint8_t*>(h_data.data())[h_data.size() - 4];
+        rmm::device_buffer dst(decompressed_size);
+        inf_args->srcDevice = static_cast<const uint8_t*>(src.data());
+        inf_args->dstDevice = static_cast<uint8_t*>(dst.data());
+        inf_args->srcSize   = src.size();
+        inf_args->dstSize   = dst.size();
+
+        // Copy structs to GPU.
+        CUDA_TRY(cudaMemcpyAsync(d_inf_args.data().get(),
+                                 inf_args,
+                                 sizeof(cudf::io::gpu_inflate_input_s),
+                                 cudaMemcpyHostToDevice,
+                                 0));
+        CUDA_TRY(cudaMemcpyAsync(d_inf_stat.data().get(),
+                                 inf_stat,
+                                 sizeof(cudf::io::gpu_inflate_status_s),
+                                 cudaMemcpyHostToDevice,
+                                 0));
+
+        // Inflate.
+        CUDA_TRY(cudf::io::gpuinflate(d_inf_args.data().get(),
+                                      d_inf_stat.data().get(),
+                                      1 /* count of inputs */,
+                                      1 /* file has gzip header */));
+
+        // Get the results.  These are ignored.  TODO: Don't ignore?
+        CUDA_TRY(cudaMemcpyAsync(inf_stat,
+                                 d_inf_stat.data().get(),
+                                 sizeof(cudf::io::gpu_inflate_status_s),
+                                 cudaMemcpyDeviceToHost,
+                                 0));
+
+        h_uncomp_data_owner.resize(decompressed_size);
+        CUDA_TRY(cudaMemcpyAsync(
+                                  h_uncomp_data_owner.data(),
+                                  inf_args->dstDevice,
+                                  inf_args->dstSize,
+                                  cudaMemcpyDeviceToHost, 0));
+        CUDA_TRY(cudaStreamSynchronize(0));
+
+        // Clean up pinned memory.
+        CUDA_TRY(cudaFreeHost(inf_stat));
+        CUDA_TRY(cudaFreeHost(inf_args));
       } else {
         h_uncomp_data_owner = get_uncompressed_data(h_data, compression_type_);
-        h_data              = h_uncomp_data_owner;
       }
+      h_data = h_uncomp_data_owner;
     }
     // None of the parameters for row selection is used, we are parsing the entire file
     const bool load_whole_file = range_offset == 0 && range_size == 0 && skip_rows <= 0 &&
