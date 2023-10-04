@@ -370,6 +370,9 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
     }
   };
 
+  static bool const dump_comp_info =
+    cudf::io::detail::getenv_or("CUDF_PARQUET_DUMP_COMPRESSION_INFO", 0);
+
   // Brotli scratch memory for decompressing
   rmm::device_buffer debrotli_scratch;
 
@@ -453,8 +456,10 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
         copy_in.emplace_back(page.page_data, offset);
         copy_out.emplace_back(dst_base, offset);
       }
-      std::cout << pg_idx++ << ": " << std::endl;
-      std::cout << page << std::endl;
+      if (dump_comp_info) {
+        std::cout << pg_idx++ << ": " << std::endl;
+        std::cout << page << std::endl;
+      }
       comp_in.emplace_back(page.page_data + offset,
                            static_cast<size_t>(page.compressed_page_size - offset));
       comp_out.emplace_back(dst_base + offset,
@@ -463,7 +468,7 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
       decomp_offset += page.uncompressed_page_size;
     });
 
-    {
+    if (dump_comp_info) {
       static int g_idx = 0;
       int idx          = 0;
       for (auto& in : comp_in) {
@@ -547,7 +552,7 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
   // page_data; it now points to the uncompressed data buffer
   pages.host_to_device_async(stream);
 
-  {
+  if (dump_comp_info) {
     stream.synchronize();
     int idx          = 0;
     static int g_idx = 0;
