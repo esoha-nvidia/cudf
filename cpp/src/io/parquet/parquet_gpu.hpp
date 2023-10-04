@@ -292,6 +292,32 @@ struct PageInfo {
   uint8_t* lvl_decode_buf[level_type::NUM_LEVEL_TYPES];
 
   uint32_t kernel_mask;
+
+  friend std::ostream& operator<<(std::ostream& os, const PageInfo& desc)
+  {
+    os << "compressed_page_size: " << desc.compressed_page_size << std::endl;
+    os << "uncompressed_page_size: " << desc.uncompressed_page_size << std::endl;
+    os << "num_input_values: " << desc.num_input_values << std::endl;
+    os << "chunk_row: " << desc.chunk_row << std::endl;
+    os << "num_rows: " << desc.num_rows << std::endl;
+    os << "num_nulls: " << desc.num_nulls << std::endl;
+    os << "num_valids: " << desc.num_valids << std::endl;
+    os << "chunk_idx: " << desc.chunk_idx << std::endl;
+    os << "src_col_schema: " << desc.src_col_schema << std::endl;
+    os << "flags: " << static_cast<int>(desc.flags) << std::endl;
+    os << "encoding: " << static_cast<int>(desc.encoding) << std::endl;
+    os << "definition_level_encoding: " << static_cast<int>(desc.definition_level_encoding)
+       << std::endl;
+    os << "repetition_level_encoding: " << static_cast<int>(desc.repetition_level_encoding)
+       << std::endl;
+    os << "skipped_values: " << desc.skipped_values << std::endl;
+    os << "skipped_leaf_values: " << desc.skipped_leaf_values << std::endl;
+    os << "str_bytes: " << desc.str_bytes << std::endl;
+    os << "str_offset: " << desc.str_offset << std::endl;
+    os << "num_output_nesting_levels: " << desc.num_output_nesting_levels << std::endl;
+    os << "nesting_info_size: " << desc.nesting_info_size << std::endl;
+    return os;
+  }
 };
 
 /**
@@ -373,6 +399,34 @@ struct ColumnChunkDesc {
 
   int32_t src_col_index{};   // my input column index
   int32_t src_col_schema{};  // my schema index in the file
+
+  friend std::ostream& operator<<(std::ostream& os, const ColumnChunkDesc& desc)
+  {
+    os << "compressed_size: " << desc.compressed_size << std::endl;
+    os << "num_values: " << desc.num_values << std::endl;
+    os << "start_row: " << desc.start_row << std::endl;
+    os << "num_rows: " << desc.num_rows << std::endl;
+    os << "max_definition_level: " << desc.max_level[level_type::DEFINITION] << std::endl;
+    os << "max_repetition_level: " << desc.max_level[level_type::REPETITION] << std::endl;
+    os << "max_nesting_depth: " << desc.max_nesting_depth << std::endl;
+    os << "data_type: " << desc.data_type << std::endl;
+    os << "def_level_bits: " << static_cast<int>(desc.level_bits[level_type::DEFINITION])
+       << std::endl;
+    os << "rep_level_bits: " << static_cast<int>(desc.level_bits[level_type::REPETITION])
+       << std::endl;
+    os << "num_data_pages: " << desc.num_data_pages << std::endl;
+    os << "num_dict_pages: " << desc.num_dict_pages << std::endl;
+    os << "max_num_pages: " << desc.max_num_pages << std::endl;
+    os << "codec: " << static_cast<int>(desc.codec) << std::endl;
+    os << "converted_type: " << static_cast<int>(desc.converted_type) << std::endl;
+    os << "decimal_precision: " << desc.decimal_precision << std::endl;
+    os << "ts_clock_rate: " << desc.ts_clock_rate << std::endl;
+    os << "src_col_index: " << desc.src_col_index << std::endl;
+    os << "src_col_schema: " << desc.src_col_schema << std::endl;
+    // ... (Add more fields as needed)
+
+    return os;
+  }
 };
 
 /**
