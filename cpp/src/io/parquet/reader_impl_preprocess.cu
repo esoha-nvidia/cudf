@@ -369,10 +369,21 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
       page_count += page_stride;
     }
   };
-
   static bool const dump_comp_info =
     cudf::io::detail::getenv_or("CUDF_PARQUET_DUMP_COMPRESSION_INFO", 0);
 
+  if (dump_comp_info) {
+    for (size_t c = 0, page_count = 0; c < chunks.size(); c++) {
+      std::cout << "chunk " << c << ":\n";
+      std::cout << chunks[c] << "\n";
+      const auto page_stride = chunks[c].max_num_pages;
+      for (int k = 0; k < page_stride; k++) {
+        std::cout << "page " << (page_count + k) << " (page " << k << " of chunk " << c << "):\n";
+	std::cout << pages[page_count + k] << "\n";
+      }
+      page_count += page_stride;
+    }
+  }
   // Brotli scratch memory for decompressing
   rmm::device_buffer debrotli_scratch;
 
@@ -442,7 +453,6 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
   int32_t start_pos    = 0;
   for (auto const& codec : codecs) {
     if (codec.num_pages == 0) { continue; }
-    auto pg_idx = 0;
     for_each_codec_page(codec.compression_type, [&](size_t page_idx) {
       auto const dst_base = static_cast<uint8_t*>(decomp_pages.data()) + decomp_offset;
       auto& page          = pages[page_idx];
@@ -455,10 +465,6 @@ void saveVectorToBinaryFile(const std::vector<uint8_t>& data, const std::string&
       if (offset != 0) {
         copy_in.emplace_back(page.page_data, offset);
         copy_out.emplace_back(dst_base, offset);
-      }
-      if (dump_comp_info) {
-        std::cout << pg_idx++ << ": " << std::endl;
-        std::cout << page << std::endl;
       }
       comp_in.emplace_back(page.page_data + offset,
                            static_cast<size_t>(page.compressed_page_size - offset));
